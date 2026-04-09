@@ -78,14 +78,25 @@ export interface CountryCatalogEntry {
 
 export type CountriesListValue = Record<string, CountryCatalogEntry>;
 
-export interface PriceQuote {
-  cost: string | `${number}`;
+type PriceQuoteBase = {
   count: number | `${number}`;
   [field: string]: string | number | boolean | undefined;
-}
+};
+
+export type PriceQuote =
+  | (PriceQuoteBase & {
+      cost: string | `${number}`;
+      price?: string | `${number}`;
+    })
+  | (PriceQuoteBase & {
+      price: string | `${number}`;
+      cost?: string | `${number}`;
+    });
 
 export type PricesV1Value = Record<string, Record<string, string>>;
-export type PricesV2Value = Record<string, Record<string, PriceQuote>>;
+export type PricesV2LegacyValue = Record<string, Record<string, PriceQuote>>;
+export type PricesV2BucketsValue = Record<string, Record<string, Record<string, number | `${number}`>>>;
+export type PricesV2Value = PricesV2LegacyValue | PricesV2BucketsValue;
 export type PricesV3ServiceValue = Record<string, PriceQuote>;
 export type PricesV3ProviderValue = Record<string, PricesV3ServiceValue>;
 export type PricesV3Value = Record<string, PricesV3ServiceValue | PricesV3ProviderValue>;

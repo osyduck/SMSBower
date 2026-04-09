@@ -174,6 +174,31 @@ describe("createSmsBowerClient", () => {
     });
   });
 
+  it("ignores wrapped getServicesList entries with invalid code or name when valid entries exist", async () => {
+    const { fetch } = createSequencedFetchMock(
+      '{"status":"success","services":[{"code":"ot","name":"WhatsApp"},{"code":null,"name":"BP - club"},{"code":"wa","name":"WhatsApp Business"},{"code":"","name":"Empty code"},{"code":"ig","name":null}]}',
+    );
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getServicesList();
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse:
+        '{"status":"success","services":[{"code":"ot","name":"WhatsApp"},{"code":null,"name":"BP - club"},{"code":"wa","name":"WhatsApp Business"},{"code":"","name":"Empty code"},{"code":"ig","name":null}]}',
+      value: {
+        ot: "WhatsApp",
+        wa: "WhatsApp Business",
+      },
+    });
+  });
+
   it("normalizes empty wrapped getServicesList services array to empty map", async () => {
     const { fetch } = createSequencedFetchMock('{"status":"success","services":[]}');
 
@@ -247,6 +272,35 @@ describe("createSmsBowerClient", () => {
     expect(params.get("action")).toBe("getCountries");
   });
 
+  it("ignores malformed getCountries entries when valid entries exist", async () => {
+    const { fetch } = createSequencedFetchMock(
+      '{"6":{"id":"6","eng":"Indonesia","rus":"Индонезия","chn":"印度尼西亚"},"":{"id":null,"eng":"Faroe Islands","rus":"Фарерские острова"}}',
+    );
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getCountries();
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse:
+        '{"6":{"id":"6","eng":"Indonesia","rus":"Индонезия","chn":"印度尼西亚"},"":{"id":null,"eng":"Faroe Islands","rus":"Фарерские острова"}}',
+      value: {
+        6: {
+          id: "6",
+          eng: "Indonesia",
+          rus: "Индонезия",
+          chn: "印度尼西亚",
+        },
+      },
+    });
+  });
+
   it("maps getPrices to JSON parsing", async () => {
     const { calls, fetch } = createSequencedFetchMock('{"ot":{"6":"12.50"}}');
 
@@ -276,6 +330,32 @@ describe("createSmsBowerClient", () => {
     expect(params.get("action")).toBe("getPrices");
     expect(params.get("service")).toBe("ot");
     expect(params.get("country")).toBe("6");
+  });
+
+  it("normalizes getPrices when upstream returns country-first quote shape", async () => {
+    const { fetch } = createSequencedFetchMock('{"6":{"ot":{"cost":0.21,"count":53097}}}');
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getPrices({
+      service: "ot",
+      country: 6,
+    });
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse: '{"6":{"ot":{"cost":0.21,"count":53097}}}',
+      value: {
+        ot: {
+          6: "0.21",
+        },
+      },
+    });
   });
 
   it("maps getPricesV2 to JSON parsing", async () => {
@@ -312,6 +392,35 @@ describe("createSmsBowerClient", () => {
     expect(params.get("country")).toBe("6");
   });
 
+  it("accepts getPricesV2 country-first bucket payload from live API", async () => {
+    const { fetch } = createSequencedFetchMock('{"6":{"ot":{"0.004":90,"0.21":919}}}');
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getPricesV2({
+      service: "ot",
+      country: 6,
+    });
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse: '{"6":{"ot":{"0.004":90,"0.21":919}}}',
+      value: {
+        6: {
+          ot: {
+            "0.004": 90,
+            "0.21": 919,
+          },
+        },
+      },
+    });
+  });
+
   it("maps getPricesV3 to JSON parsing with optional filters", async () => {
     const { calls, fetch } = createSequencedFetchMock('{"2295":{"ot":{"cost":"10.00","count":"4"}}}');
 
@@ -346,6 +455,41 @@ describe("createSmsBowerClient", () => {
     expect(params.get("country")).toBe("6");
     expect(params.get("service")).toBe("ot");
     expect(params.get("providerIds")).toBe("2295,3027,1507");
+  });
+
+  it("accepts getPricesV3 provider objects that use price key", async () => {
+    const { fetch } = createSequencedFetchMock(
+      '{"6":{"ot":{"2295":{"count":3677,"price":0.01,"provider_id":2295}}}}',
+    );
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getPricesV3({
+      country: 6,
+      service: "ot",
+      providerIds: [2295],
+    });
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse: '{"6":{"ot":{"2295":{"count":3677,"price":0.01,"provider_id":2295}}}}',
+      value: {
+        6: {
+          ot: {
+            2295: {
+              count: 3677,
+              price: 0.01,
+              provider_id: 2295,
+            },
+          },
+        },
+      },
+    });
   });
 
   it("maps BAD_COUNTRY for getPricesV3 to SmsBowerApiError", async () => {

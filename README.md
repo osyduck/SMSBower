@@ -100,8 +100,15 @@ try {
   - wrapped payload: `{ status, services: [{ code, name }] }`
 - The SDK always normalizes `getServicesList` output to the canonical map shape (`Record<string, string>`) in `services.value`.
 - For wrapped payload duplicates, the last item for a given `code` wins.
-- Malformed wrapped `services` items throw `SmsBowerParseError` with code `MALFORMED_JSON`.
+- Wrapped `services` items with invalid `code`/`name` are ignored when valid entries exist; if no valid entries remain, the SDK throws `SmsBowerParseError` with code `MALFORMED_JSON`.
 - The unsupported wallet endpoint was removed because the upstream action is invalid (`BAD_ACTION`); migrate by removing wallet endpoint usage from consumer code.
+
+## Compatibility notes (0.3.0)
+
+- `getCountries` skips malformed upstream entries when valid country rows still exist.
+- `getPrices` supports country-first quote payloads from live API and normalizes to canonical SDK output.
+- `getPricesV2` supports live bucket-map payloads (`price -> count`).
+- `getPricesV3` accepts provider quote objects using `price` as well as `cost`.
 
 ## Local quality gates
 

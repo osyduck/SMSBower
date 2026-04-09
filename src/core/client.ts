@@ -64,19 +64,14 @@ const isServicesListValue = (value: unknown): value is ServicesListValue => {
   return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
 };
 
-const isWrappedServicesListEntry = (value: unknown): value is { code: string; name: string } => {
-  return isRecord(value) && typeof value.code === "string" && typeof value.name === "string";
-};
-
 const isWrappedServicesListValue = (value: unknown): value is {
   status: unknown;
-  services: ReadonlyArray<{ code: string; name: string }>;
+  services: ReadonlyArray<unknown>;
 } => {
   return (
     isRecord(value) &&
     "status" in value &&
-    Array.isArray(value.services) &&
-    value.services.every((entry) => isWrappedServicesListEntry(entry))
+    Array.isArray(value.services)
   );
 };
 
@@ -87,8 +82,24 @@ const normalizeServicesListValue = (value: unknown): ServicesListValue | undefin
 
   if (isWrappedServicesListValue(value)) {
     const normalized: ServicesListValue = {};
+    let invalidEntryCount = 0;
+
     for (const entry of value.services) {
-      normalized[entry.code] = entry.name;
+      if (
+        isRecord(entry) &&
+        typeof entry.code === "string" &&
+        entry.code.length > 0 &&
+        typeof entry.name === "string"
+      ) {
+        normalized[entry.code] = entry.name;
+        continue;
+      }
+
+      invalidEntryCount += 1;
+    }
+
+    if (Object.keys(normalized).length === 0 && value.services.length > 0 && invalidEntryCount > 0) {
+      return undefined;
     }
 
     return normalized;
@@ -107,16 +118,46 @@ const isCountryCatalogEntry = (value: unknown): value is CountriesListValue[stri
   );
 };
 
-const isCountriesListValue = (value: unknown): value is CountriesListValue => {
-  return isRecord(value) && Object.values(value).every((entry) => isCountryCatalogEntry(entry));
+const normalizeCountriesListValue = (value: unknown): CountriesListValue | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized: CountriesListValue = {};
+  let invalidEntryCount = 0;
+
+  for (const [countryCode, entry] of Object.entries(value)) {
+    if (isCountryCatalogEntry(entry)) {
+      normalized[countryCode] = entry;
+      continue;
+    }
+
+    invalidEntryCount += 1;
+  }
+
+  if (Object.keys(normalized).length === 0 && invalidEntryCount > 0) {
+    return undefined;
+  }
+
+  return normalized;
 };
 
 const isPriceQuote = (value: unknown): value is PriceQuote => {
   return (
     isRecord(value) &&
-    typeof value.cost === "string" &&
+    (typeof value.cost === "string" || typeof value.cost === "number" || typeof value.price === "string" || typeof value.price === "number") &&
     (typeof value.count === "string" || typeof value.count === "number") &&
     Object.values(value).every((entry) => isJsonScalar(entry))
+  );
+};
+
+const isPriceBucketsValue = (value: unknown): value is Record<string, number | `${number}`> => {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length > 0 &&
+    Object.entries(value).every(
+      ([price, count]) => !Number.isNaN(Number(price)) && (typeof count === "string" || typeof count === "number"),
+    )
   );
 };
 
@@ -131,14 +172,68 @@ const isPricesV1Value = (value: unknown): value is PricesV1Value => {
   );
 };
 
+const normalizePricesV1Value = (value: unknown): PricesV1Value | undefined => {
+  if (isPricesV1Value(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([service, countries]) => [service, { ...countries }]),
+    );
+  }
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized: PricesV1Value = {};
+  let validQuoteCount = 0;
+
+  for (const [country, serviceQuotes] of Object.entries(value)) {
+    if (!isRecord(serviceQuotes)) {
+      continue;
+    }
+
+    for (const [service, quote] of Object.entries(serviceQuotes)) {
+      if (!isPriceQuote(quote)) {
+        continue;
+      }
+
+      if (!normalized[service]) {
+        normalized[service] = {};
+      }
+
+      normalized[service][country] = String(quote.cost);
+      validQuoteCount += 1;
+    }
+  }
+
+  if (validQuoteCount === 0) {
+    return undefined;
+  }
+
+  return normalized;
+};
+
 const isPricesV2Value = (value: unknown): value is PricesV2Value => {
-  return (
-    isRecord(value) &&
-    Object.values(value).every(
-      (serviceQuotes) =>
-        isRecord(serviceQuotes) && Object.values(serviceQuotes).every((quote) => isPriceQuote(quote)),
-    )
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const values = Object.values(value);
+  const isLegacy = values.every(
+    (serviceQuotes) =>
+      isRecord(serviceQuotes) && Object.values(serviceQuotes).every((quote) => isPriceQuote(quote)),
   );
+
+  if (isLegacy) {
+    return true;
+  }
+
+  const isCountryFirstBuckets = values.every(
+    (countryServices) =>
+      isRecord(countryServices) &&
+      Object.values(countryServices).every((serviceBuckets) => isPriceBucketsValue(serviceBuckets)),
+  );
+
+  return isCountryFirstBuckets;
 };
 
 const isPricesV3ServiceValue = (value: unknown): value is PricesV3ServiceValue => {
@@ -240,6 +335,68 @@ const parseServicesListActionResponse = (
   };
 };
 
+const parseCountriesActionResponse = (
+  responseBody: string,
+  action: string,
+): SmsBowerJsonContract<CountriesListValue> => {
+  const parsed = parseSmsBowerResponse(responseBody);
+  if (parsed.format !== "json") {
+    throw new SmsBowerParseError(
+      "UNKNOWN_TOKEN",
+      `SMSBower returned an unexpected response format for action "${action}".`,
+      parsed.rawResponse,
+      {
+        token: parsed.token,
+      },
+    );
+  }
+
+  const normalizedValue = normalizeCountriesListValue(parsed.value);
+  if (!normalizedValue) {
+    throw new SmsBowerParseError(
+      "MALFORMED_JSON",
+      `SMSBower returned JSON payload with an unexpected shape for action "${action}".`,
+      parsed.rawResponse,
+    );
+  }
+
+  return {
+    ...parsed,
+    value: normalizedValue,
+  };
+};
+
+const parsePricesV1ActionResponse = (
+  responseBody: string,
+  action: string,
+): SmsBowerJsonContract<PricesV1Value> => {
+  const parsed = parseSmsBowerResponse(responseBody);
+  if (parsed.format !== "json") {
+    throw new SmsBowerParseError(
+      "UNKNOWN_TOKEN",
+      `SMSBower returned an unexpected response format for action "${action}".`,
+      parsed.rawResponse,
+      {
+        token: parsed.token,
+      },
+    );
+  }
+
+  const normalizedValue = normalizePricesV1Value(parsed.value);
+  if (!normalizedValue) {
+    throw new SmsBowerParseError(
+      "MALFORMED_JSON",
+      `SMSBower returned JSON payload with an unexpected shape for action "${action}".`,
+      parsed.rawResponse,
+    );
+  }
+
+  return {
+    ...parsed,
+    value: normalizedValue,
+  };
+};
+
 const serializeProviderIds = (providerIds: SmsBowerProviderIds | undefined): string | undefined => {
   if (providerIds === undefined) {
     return undefined;
@@ -286,14 +443,14 @@ export const createSmsBowerClient = (
     },
     async getCountries(params: GetCountriesParams = {}): Promise<GetCountriesResponse> {
       const responseBody = await this.requestAction("getCountries", params);
-      return parseJsonActionResponse(responseBody, "getCountries", isCountriesListValue);
+      return parseCountriesActionResponse(responseBody, "getCountries");
     },
     async getPrices(params: GetPricesParams): Promise<GetPricesResponse> {
       const responseBody = await this.requestAction("getPrices", {
         service: params.service,
         country: params.country,
       });
-      return parseJsonActionResponse(responseBody, "getPrices", isPricesV1Value);
+      return parsePricesV1ActionResponse(responseBody, "getPrices");
     },
     async getPricesV2(params: GetPricesV2Params): Promise<GetPricesV2Response> {
       const responseBody = await this.requestAction("getPricesV2", {
