@@ -98,11 +98,11 @@ describe("parseSmsBowerResponse", () => {
   );
 
   it("parses JSON payload responses", () => {
-    expect(parseSmsBowerResponse('{"wallet_address":"0xabc123"}')).toEqual({
+    expect(parseSmsBowerResponse('{"sample":"ok"}')).toEqual({
       format: "json",
-      rawResponse: '{"wallet_address":"0xabc123"}',
+      rawResponse: '{"sample":"ok"}',
       value: {
-        wallet_address: "0xabc123",
+        sample: "ok",
       },
     });
   });
@@ -167,10 +167,10 @@ describe("parseSmsBowerResponse", () => {
   });
 
   it("throws SmsBowerParseError for malformed JSON payloads", () => {
-    expect(() => parseSmsBowerResponse('{"wallet_address":')).toThrowError(SmsBowerParseError);
+    expect(() => parseSmsBowerResponse('{"sample":')).toThrowError(SmsBowerParseError);
 
     try {
-      parseSmsBowerResponse('{"wallet_address":');
+      parseSmsBowerResponse('{"sample":');
       throw new Error("Expected an SmsBowerParseError to be thrown.");
     } catch (error) {
       expect(error).toMatchObject({

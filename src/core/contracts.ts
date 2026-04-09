@@ -30,7 +30,6 @@ export interface ProviderFilterParams {
 export type GetBalanceParams = SmsBowerNoParams;
 export type GetServicesListParams = SmsBowerNoParams;
 export type GetCountriesParams = SmsBowerNoParams;
-export type GetWalletAddressParams = SmsBowerNoParams;
 
 export interface GetPricesParams extends ServiceCountryParams {}
 
@@ -91,17 +90,13 @@ export type PricesV3ServiceValue = Record<string, PriceQuote>;
 export type PricesV3ProviderValue = Record<string, PricesV3ServiceValue>;
 export type PricesV3Value = Record<string, PricesV3ServiceValue | PricesV3ProviderValue>;
 
-export interface WalletAddressValue {
-  wallet_address: string;
-}
-
 export type GetBalanceResponse = AccessBalanceResponse;
-export type GetServicesListResponse = SmsBowerJsonContract<ServicesListValue>;
+export type GetServicesListCanonicalResponse = SmsBowerJsonContract<ServicesListValue>;
+export type GetServicesListResponse = GetServicesListCanonicalResponse;
 export type GetCountriesResponse = SmsBowerJsonContract<CountriesListValue>;
 export type GetPricesResponse = SmsBowerJsonContract<PricesV1Value>;
 export type GetPricesV2Response = SmsBowerJsonContract<PricesV2Value>;
 export type GetPricesV3Response = SmsBowerJsonContract<PricesV3Value>;
-export type GetWalletAddressResponse = SmsBowerJsonContract<WalletAddressValue>;
 export type GetNumberResponse = AccessNumberResponse;
 export type GetNumberV2Response = AccessNumberResponse;
 
@@ -123,11 +118,10 @@ export type SetStatusResponse = ActivationSetStatusResponse;
 
 export interface SmsBowerAccountEndpointContracts {
   getBalance(params?: GetBalanceParams): Promise<GetBalanceResponse>;
-  getWalletAddress(params?: GetWalletAddressParams): Promise<GetWalletAddressResponse>;
 }
 
 export interface SmsBowerCatalogEndpointContracts {
-  getServicesList(params?: GetServicesListParams): Promise<GetServicesListResponse>;
+  getServicesList(params?: GetServicesListParams): Promise<GetServicesListCanonicalResponse>;
   getCountries(params?: GetCountriesParams): Promise<GetCountriesResponse>;
 }
 
@@ -156,7 +150,6 @@ export interface SmsBowerEndpointContracts
 
 export interface SmsBowerActionParamsMap {
   getBalance: GetBalanceParams;
-  getWalletAddress: GetWalletAddressParams;
   getServicesList: GetServicesListParams;
   getCountries: GetCountriesParams;
   getPrices: GetPricesParams;
@@ -193,8 +186,7 @@ export interface SmsBowerActionParamsMap {
 
 export interface SmsBowerActionContractMap {
   getBalance: { params: GetBalanceParams; response: GetBalanceResponse };
-  getWalletAddress: { params: GetWalletAddressParams; response: GetWalletAddressResponse };
-  getServicesList: { params: GetServicesListParams; response: GetServicesListResponse };
+  getServicesList: { params: GetServicesListParams; response: GetServicesListCanonicalResponse };
   getCountries: { params: GetCountriesParams; response: GetCountriesResponse };
   getPrices: { params: GetPricesParams; response: GetPricesResponse };
   getPricesV2: { params: GetPricesV2Params; response: GetPricesV2Response };

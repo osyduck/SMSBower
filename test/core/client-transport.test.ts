@@ -103,30 +103,6 @@ describe("createSmsBowerClient", () => {
     expect(params.get("action")).toBe("getBalance");
   });
 
-  it("maps getWalletAddress to JSON parsing", async () => {
-    const { calls, fetch } = createSequencedFetchMock('{"wallet_address":"0xabc123"}');
-
-    const client = createSmsBowerClient(
-      {
-        apiKey: "api-key",
-      },
-      { fetch },
-    );
-
-    const result = await client.getWalletAddress();
-
-    expect(result).toEqual({
-      format: "json",
-      rawResponse: '{"wallet_address":"0xabc123"}',
-      value: {
-        wallet_address: "0xabc123",
-      },
-    });
-
-    const params = getRequestParams(calls[0]);
-    expect(params.get("action")).toBe("getWalletAddress");
-  });
-
   it("maps getServicesList to JSON parsing", async () => {
     const { calls, fetch } = createSequencedFetchMock('{"ot":"Example Service"}');
 
@@ -149,6 +125,98 @@ describe("createSmsBowerClient", () => {
 
     const params = getRequestParams(calls[0]);
     expect(params.get("action")).toBe("getServicesList");
+  });
+
+  it("normalizes wrapped getServicesList payload to canonical map", async () => {
+    const { fetch } = createSequencedFetchMock(
+      '{"status":"success","services":[{"code":"ot","name":"WhatsApp"}]}',
+    );
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getServicesList();
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse: '{"status":"success","services":[{"code":"ot","name":"WhatsApp"}]}',
+      value: {
+        ot: "WhatsApp",
+      },
+    });
+  });
+
+  it("uses last code wins when wrapped getServicesList has duplicate codes", async () => {
+    const { fetch } = createSequencedFetchMock(
+      '{"status":"success","services":[{"code":"ot","name":"WhatsApp"},{"code":"ot","name":"WhatsApp Business"}]}',
+    );
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getServicesList();
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse:
+        '{"status":"success","services":[{"code":"ot","name":"WhatsApp"},{"code":"ot","name":"WhatsApp Business"}]}',
+      value: {
+        ot: "WhatsApp Business",
+      },
+    });
+  });
+
+  it("normalizes empty wrapped getServicesList services array to empty map", async () => {
+    const { fetch } = createSequencedFetchMock('{"status":"success","services":[]}');
+
+    const client = createSmsBowerClient(
+      {
+        apiKey: "api-key",
+      },
+      { fetch },
+    );
+
+    const result = await client.getServicesList();
+
+    expect(result).toEqual({
+      format: "json",
+      rawResponse: '{"status":"success","services":[]}',
+      value: {},
+    });
+  });
+
+  it("throws MALFORMED_JSON for malformed wrapped getServicesList items", async () => {
+    const malformedResponses = [
+      '{"status":"success","services":[{"name":"WhatsApp"}]}',
+      '{"status":"success","services":[{"code":"ot"}]}',
+    ];
+
+    for (const responseBody of malformedResponses) {
+      const { fetch } = createSequencedFetchMock(responseBody);
+
+      const client = createSmsBowerClient(
+        {
+          apiKey: "api-key",
+        },
+        { fetch },
+      );
+
+      const requestPromise = client.getServicesList();
+
+      await expect(requestPromise).rejects.toBeInstanceOf(SmsBowerParseError);
+      await expect(requestPromise).rejects.toMatchObject({
+        code: "MALFORMED_JSON",
+        rawResponse: responseBody,
+      });
+    }
   });
 
   it("maps getCountries to JSON parsing", async () => {
@@ -321,8 +389,8 @@ describe("createSmsBowerClient", () => {
     });
   });
 
-  it("throws SmsBowerParseError for malformed JSON in JSON endpoint wrappers", async () => {
-    const { fetch } = createSequencedFetchMock('{"wallet_address":');
+  it("throws SmsBowerParseError for malformed JSON in catalog JSON endpoint wrappers", async () => {
+    const { fetch } = createSequencedFetchMock('{"ot":');
 
     const client = createSmsBowerClient(
       {
@@ -331,12 +399,12 @@ describe("createSmsBowerClient", () => {
       { fetch },
     );
 
-    const requestPromise = client.getWalletAddress();
+    const requestPromise = client.getServicesList();
 
     await expect(requestPromise).rejects.toBeInstanceOf(SmsBowerParseError);
     await expect(requestPromise).rejects.toMatchObject({
       code: "MALFORMED_JSON",
-      rawResponse: '{"wallet_address":',
+      rawResponse: '{"ot":',
     });
   });
 

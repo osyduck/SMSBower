@@ -14,8 +14,6 @@ import {
   type GetPricesV3Response,
   type GetServicesListParams,
   type GetServicesListResponse,
-  type GetWalletAddressParams,
-  type GetWalletAddressResponse,
   type PriceQuote,
   type PricesV1Value,
   type PricesV2Value,
@@ -31,7 +29,6 @@ import {
   type SmsBowerNoParams,
   type SmsBowerPriceEndpointContracts,
   type SmsBowerProviderIds,
-  type WalletAddressValue,
 } from "./contracts.js";
 import { SmsBowerParseError } from "./response-errors.js";
 import { parseSmsBowerResponse, type SmsBowerTokenResponse } from "./response-parser.js";
@@ -63,12 +60,41 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
-const isWalletAddressValue = (value: unknown): value is WalletAddressValue => {
-  return isRecord(value) && typeof value.wallet_address === "string";
-};
-
 const isServicesListValue = (value: unknown): value is ServicesListValue => {
   return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
+};
+
+const isWrappedServicesListEntry = (value: unknown): value is { code: string; name: string } => {
+  return isRecord(value) && typeof value.code === "string" && typeof value.name === "string";
+};
+
+const isWrappedServicesListValue = (value: unknown): value is {
+  status: unknown;
+  services: ReadonlyArray<{ code: string; name: string }>;
+} => {
+  return (
+    isRecord(value) &&
+    "status" in value &&
+    Array.isArray(value.services) &&
+    value.services.every((entry) => isWrappedServicesListEntry(entry))
+  );
+};
+
+const normalizeServicesListValue = (value: unknown): ServicesListValue | undefined => {
+  if (isServicesListValue(value)) {
+    return { ...value };
+  }
+
+  if (isWrappedServicesListValue(value)) {
+    const normalized: ServicesListValue = {};
+    for (const entry of value.services) {
+      normalized[entry.code] = entry.name;
+    }
+
+    return normalized;
+  }
+
+  return undefined;
 };
 
 const isCountryCatalogEntry = (value: unknown): value is CountriesListValue[string] => {
@@ -183,6 +209,37 @@ const parseJsonActionResponse = <TValue>(
   };
 };
 
+const parseServicesListActionResponse = (
+  responseBody: string,
+  action: string,
+): SmsBowerJsonContract<ServicesListValue> => {
+  const parsed = parseSmsBowerResponse(responseBody);
+  if (parsed.format !== "json") {
+    throw new SmsBowerParseError(
+      "UNKNOWN_TOKEN",
+      `SMSBower returned an unexpected response format for action "${action}".`,
+      parsed.rawResponse,
+      {
+        token: parsed.token,
+      },
+    );
+  }
+
+  const normalizedValue = normalizeServicesListValue(parsed.value);
+  if (!normalizedValue) {
+    throw new SmsBowerParseError(
+      "MALFORMED_JSON",
+      `SMSBower returned JSON payload with an unexpected shape for action "${action}".`,
+      parsed.rawResponse,
+    );
+  }
+
+  return {
+    ...parsed,
+    value: normalizedValue,
+  };
+};
+
 const serializeProviderIds = (providerIds: SmsBowerProviderIds | undefined): string | undefined => {
   if (providerIds === undefined) {
     return undefined;
@@ -223,13 +280,9 @@ export const createSmsBowerClient = (
       const responseBody = await this.requestAction("getBalance", params);
       return parseTokenActionResponse(responseBody, "getBalance", "ACCESS_BALANCE");
     },
-    async getWalletAddress(params: GetWalletAddressParams = {}): Promise<GetWalletAddressResponse> {
-      const responseBody = await this.requestAction("getWalletAddress", params);
-      return parseJsonActionResponse(responseBody, "getWalletAddress", isWalletAddressValue);
-    },
     async getServicesList(params: GetServicesListParams = {}): Promise<GetServicesListResponse> {
       const responseBody = await this.requestAction("getServicesList", params);
-      return parseJsonActionResponse(responseBody, "getServicesList", isServicesListValue);
+      return parseServicesListActionResponse(responseBody, "getServicesList");
     },
     async getCountries(params: GetCountriesParams = {}): Promise<GetCountriesResponse> {
       const responseBody = await this.requestAction("getCountries", params);

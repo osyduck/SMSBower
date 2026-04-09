@@ -43,8 +43,6 @@ export type {
   GetServicesListResponse,
   GetStatusParams,
   GetStatusResponse,
-  GetWalletAddressParams,
-  GetWalletAddressResponse,
   NumberRequestFilters,
   PriceQuote,
   PricesV1Value,
@@ -71,7 +69,6 @@ export type {
   SmsBowerPriceEndpointContracts,
   SmsBowerProviderId,
   SmsBowerProviderIds,
-  WalletAddressValue,
 } from "./contracts.js";
 export type { SmsBowerCoreClient } from "./client.js";
 export type { SmsBowerActivationEndpoints } from "./activation.js";

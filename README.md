@@ -40,7 +40,6 @@ import { createSmsBowerClient } from "smsbower";
 const client = createSmsBowerClient({ apiKey: process.env.SMSBOWER_API_KEY! });
 
 const balance = await client.getBalance();
-const wallet = await client.getWalletAddress();
 const services = await client.getServicesList();
 const countries = await client.getCountries();
 
@@ -48,7 +47,7 @@ const prices = await client.getPrices({ service: "ot", country: 6 });
 const pricesV2 = await client.getPricesV2({ service: "ot", country: 6 });
 const pricesV3 = await client.getPricesV3({ country: 6, service: "ot", providerIds: [2295, 3027] });
 
-console.log(balance.token, wallet.value.wallet_address, Object.keys(services.value).length);
+console.log(balance.token, Object.keys(services.value).length);
 console.log(Object.keys(countries.value).length, prices.value, pricesV2.value, pricesV3.value);
 ```
 
@@ -93,6 +92,16 @@ try {
   }
 }
 ```
+
+## Migration notes (0.2.0)
+
+- `getServicesList` now accepts both response input shapes:
+  - legacy map: `{ [code]: name }`
+  - wrapped payload: `{ status, services: [{ code, name }] }`
+- The SDK always normalizes `getServicesList` output to the canonical map shape (`Record<string, string>`) in `services.value`.
+- For wrapped payload duplicates, the last item for a given `code` wins.
+- Malformed wrapped `services` items throw `SmsBowerParseError` with code `MALFORMED_JSON`.
+- The unsupported wallet endpoint was removed because the upstream action is invalid (`BAD_ACTION`); migrate by removing wallet endpoint usage from consumer code.
 
 ## Local quality gates
 
