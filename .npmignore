@@ -1,0 +1,11 @@
+.sisyphus/
+node_modules/
+coverage/
+
+*.log
+*.tmp
+*.local
+
+.env
+.env.*
+!.env.example

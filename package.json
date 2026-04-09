@@ -1,0 +1,51 @@
+{
+  "name": "smsbower",
+  "version": "0.1.0",
+  "description": "Node.js TypeScript SDK for the SMSBower client API.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean --target node18 --platform node",
+    "lint": "tsc --project tsconfig.json --noEmit --pretty false --incremental false",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "typecheck:contracts": "tsc --project test/tsconfig.contracts.json --noEmit",
+    "test": "vitest run",
+    "test:core": "vitest run test/core",
+    "test:integration": "vitest run --config test/integration/vitest.integration.config.ts",
+    "test:real": "node scripts/real-case.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.4.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.9"
+  },
+  "keywords": [
+    "smsbower",
+    "sms",
+    "otp",
+    "sdk",
+    "typescript",
+    "nodejs"
+  ],
+  "license": "MIT"
+}
