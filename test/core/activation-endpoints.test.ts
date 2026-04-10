@@ -309,6 +309,24 @@ describe("createSmsBowerActivationEndpoints", () => {
     });
   });
 
+  it.each(["getNumber", "getNumberV2"] as const)("maps NO_NUMBERS from %s to SmsBowerApiError", async (method) => {
+    const { fetchMock } = createQueuedFetchMock(["NO_NUMBERS"]);
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const endpoints = createSmsBowerActivationEndpoints(coreClient);
+
+    const request = endpoints[method]({
+      service: "ot",
+      country: 6,
+    });
+
+    await expect(request).rejects.toBeInstanceOf(SmsBowerApiError);
+    await expect(request).rejects.toMatchObject({
+      code: "NO_NUMBERS",
+      token: "NO_NUMBERS",
+      rawResponse: "NO_NUMBERS",
+    });
+  });
+
   it("throws SmsBowerParseError when getStatus receives an unknown lifecycle token", async () => {
     const { fetchMock } = createQueuedFetchMock(["STATUS_UNKNOWN_X"]);
     const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });

@@ -4,6 +4,7 @@ export const SMSBOWER_API_ERROR_CODES = [
   "BAD_SERVICE",
   "BAD_STATUS",
   "NO_ACTIVATION",
+  "NO_NUMBERS",
   "EARLY_CANCEL_DENIED",
   "BAD_COUNTRY",
 ] as const;
@@ -22,6 +23,7 @@ const API_ERROR_MESSAGES: Record<SmsBowerApiErrorCode, string> = {
   BAD_SERVICE: "SMSBower rejected the service code.",
   BAD_STATUS: "SMSBower rejected the activation status change.",
   NO_ACTIVATION: "SMSBower could not find an activation for this request.",
+  NO_NUMBERS: "SMSBower has no ready numbers available for this request.",
   EARLY_CANCEL_DENIED: "SMSBower denied cancellation because it is too early in the activation lifecycle.",
   BAD_COUNTRY: "SMSBower rejected the country code.",
 };
@@ -32,6 +34,7 @@ const API_ERROR_BY_TOKEN: Record<string, SmsBowerApiErrorCode> = {
   BAD_SERVICE: "BAD_SERVICE",
   BAD_STATUS: "BAD_STATUS",
   NO_ACTIVATION: "NO_ACTIVATION",
+  NO_NUMBERS: "NO_NUMBERS",
   EARLY_CANCEL_DENIED: "EARLY_CANCEL_DENIED",
   BAD_COUNTRY: "BAD_COUNTRY",
 };

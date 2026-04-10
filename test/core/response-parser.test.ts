@@ -27,6 +27,7 @@ describe("parseSmsBowerResponse", () => {
     "BAD_SERVICE",
     "BAD_STATUS",
     "NO_ACTIVATION",
+    "NO_NUMBERS",
     "EARLY_CANCEL_DENIED",
     "BAD_COUNTRY",
   ] satisfies SmsBowerApiErrorCode[])("maps %s to SmsBowerApiError", (token) => {
