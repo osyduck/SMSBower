@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 - 2026-04-10
+
+### Compatibility fixes
+
+- Added `NO_NUMBERS` to the API error taxonomy so number-purchase flows now surface a typed `SmsBowerApiError` when upstream has no ready numbers available.
+- Added parser and activation endpoint coverage for `NO_NUMBERS` across `getNumber` and `getNumberV2`.
+
 ## 0.3.0 - 2026-04-09
 
 ### Compatibility fixes
