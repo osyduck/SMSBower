@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 - 2026-04-22
+
+### Compatibility fixes
+
+- Added `NO_BALANCE` to the API error taxonomy so balance-related failures now surface a typed `SmsBowerApiError` instead of an opaque `SmsBowerParseError`.
+
 ## 0.5.0 - 2026-04-21
 
 ### API alignment
