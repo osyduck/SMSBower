@@ -7,6 +7,7 @@ export const SMSBOWER_API_ERROR_CODES = [
   "NO_NUMBERS",
   "EARLY_CANCEL_DENIED",
   "BAD_COUNTRY",
+  "NO_BALANCE",
 ] as const;
 
 export type SmsBowerApiErrorCode = (typeof SMSBOWER_API_ERROR_CODES)[number];
@@ -26,6 +27,7 @@ const API_ERROR_MESSAGES: Record<SmsBowerApiErrorCode, string> = {
   NO_NUMBERS: "SMSBower has no ready numbers available for this request.",
   EARLY_CANCEL_DENIED: "SMSBower denied cancellation because it is too early in the activation lifecycle.",
   BAD_COUNTRY: "SMSBower rejected the country code.",
+  NO_BALANCE: "SMSBower reported insufficient account balance.",
 };
 
 const API_ERROR_BY_TOKEN: Record<string, SmsBowerApiErrorCode> = {
@@ -37,6 +39,7 @@ const API_ERROR_BY_TOKEN: Record<string, SmsBowerApiErrorCode> = {
   NO_NUMBERS: "NO_NUMBERS",
   EARLY_CANCEL_DENIED: "EARLY_CANCEL_DENIED",
   BAD_COUNTRY: "BAD_COUNTRY",
+  NO_BALANCE: "NO_BALANCE",
 };
 
 export class SmsBowerApiError extends Error {

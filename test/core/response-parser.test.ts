@@ -30,6 +30,7 @@ describe("parseSmsBowerResponse", () => {
     "NO_NUMBERS",
     "EARLY_CANCEL_DENIED",
     "BAD_COUNTRY",
+    "NO_BALANCE",
   ] satisfies SmsBowerApiErrorCode[])("maps %s to SmsBowerApiError", (token) => {
     assertThrowsApiError(token, token);
   });
