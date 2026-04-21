@@ -1,54 +1,56 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { AxiosInstance, AxiosResponse } from "axios";
 
 import {
   createSmsBowerActivationEndpoints,
   createSmsBowerClient,
   SmsBowerApiError,
   SmsBowerParseError,
-  type FetchLike,
   type SetStatusParams,
 } from "../../src/core/index.ts";
 
-interface FetchCall {
+interface MockCall {
   url: string;
-  init?: Parameters<FetchLike>[1];
+  method: string;
+  headers: Record<string, string>;
 }
 
-const createQueuedFetchMock = (responses: readonly string[]): { fetchMock: FetchLike; calls: FetchCall[] } => {
-  const queue = [...responses];
-  const calls: FetchCall[] = [];
+const createMockAxiosInstance = (
+  ...bodyResponses: string[]
+): {
+  calls: MockCall[];
+  instance: AxiosInstance;
+} => {
+  const calls: MockCall[] = [];
+  const queue = [...bodyResponses];
 
-  const fetchMock: FetchLike = async (url, init) => {
-    calls.push({ url, init });
-    const body = queue.shift();
-    if (body === undefined) {
-      throw new Error("No queued response for fetch mock call.");
-    }
+  const instance = {
+    request: vi.fn(async (config: any) => {
+      calls.push({ url: config.url, method: config.method, headers: config.headers });
+      const bodyText = queue.shift();
+      if (bodyText === undefined) {
+        throw new Error("No mock response available.");
+      }
+      return { status: 200, data: bodyText } as AxiosResponse;
+    }),
+  } as unknown as AxiosInstance;
 
-    return {
-      ok: true,
-      status: 200,
-      text: async () => body,
-    };
-  };
-
-  return { fetchMock, calls };
+  return { calls, instance };
 };
 
-const expectActionBody = (calls: readonly FetchCall[], index: number): URLSearchParams => {
-  const requestUrl = calls[index]?.url;
-  if (requestUrl) {
-    return new URL(requestUrl).searchParams;
+const getRequestParams = (call: MockCall | undefined): URLSearchParams => {
+  if (!call) {
+    return new URLSearchParams();
   }
 
-  const body = calls[index]?.init?.body;
-  return new URLSearchParams(typeof body === "string" ? body : "");
+  const parsedUrl = new URL(call.url);
+  return parsedUrl.searchParams;
 };
 
 describe("createSmsBowerActivationEndpoints", () => {
   it("maps getNumber ACCESS_NUMBER responses and serializes request params", async () => {
-    const { fetchMock, calls } = createQueuedFetchMock(["ACCESS_NUMBER:12345:+15551230000"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { calls, instance } = createMockAxiosInstance("ACCESS_NUMBER:12345:+15551230000");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const result = await endpoints.getNumber({
@@ -65,7 +67,7 @@ describe("createSmsBowerActivationEndpoints", () => {
       rawResponse: "ACCESS_NUMBER:12345:+15551230000",
     });
 
-    const body = expectActionBody(calls, 0);
+    const body = getRequestParams(calls[0]);
     expect(body.get("action")).toBe("getNumber");
     expect(body.get("service")).toBe("ot");
     expect(body.get("country")).toBe("6");
@@ -73,8 +75,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("maps getNumberV2 ACCESS_NUMBER responses and serializes v2 filters", async () => {
-    const { fetchMock, calls } = createQueuedFetchMock(["ACCESS_NUMBER:67890:+447700900123"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { calls, instance } = createMockAxiosInstance("ACCESS_NUMBER:67890:+447700900123");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const result = await endpoints.getNumberV2({
@@ -97,7 +99,7 @@ describe("createSmsBowerActivationEndpoints", () => {
       rawResponse: "ACCESS_NUMBER:67890:+447700900123",
     });
 
-    const body = expectActionBody(calls, 0);
+    const body = getRequestParams(calls[0]);
     expect(body.get("action")).toBe("getNumberV2");
     expect(body.get("service")).toBe("ot");
     expect(body.get("country")).toBe("6");
@@ -111,10 +113,10 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("maps getNumberV2 JSON responses to normalized ACCESS_NUMBER shape", async () => {
-    const { fetchMock } = createQueuedFetchMock([
+    const { instance } = createMockAxiosInstance(
       '{"activationId":252210263,"phoneNumber":"6285136944176","activationCost":"0.01","countryCode":"6"}',
-    ]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    );
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const result = await endpoints.getNumberV2({
@@ -133,8 +135,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("throws SmsBowerParseError when getNumberV2 JSON misses required fields", async () => {
-    const { fetchMock } = createQueuedFetchMock(['{"activationId":252210263}']);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance('{"activationId":252210263}');
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.getNumberV2({
@@ -185,27 +187,27 @@ describe("createSmsBowerActivationEndpoints", () => {
       },
     },
   ])("maps getStatus lifecycle token $response", async ({ response, expected }) => {
-    const { fetchMock, calls } = createQueuedFetchMock([response]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { calls, instance } = createMockAxiosInstance(response);
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const result = await endpoints.getStatus({ activationId: "12345" });
 
     expect(result).toEqual(expected);
 
-    const body = expectActionBody(calls, 0);
+    const body = getRequestParams(calls[0]);
     expect(body.get("action")).toBe("getStatus");
     expect(body.get("id")).toBe("12345");
   });
 
   it("setStatus supports only lifecycle statuses 1, 3, 6, and 8", async () => {
-    const { fetchMock, calls } = createQueuedFetchMock([
+    const { calls, instance } = createMockAxiosInstance(
       "STATUS_WAIT_CODE",
       "STATUS_WAIT_RETRY:7788",
       "STATUS_OK:4321",
       "STATUS_CANCEL",
-    ]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    );
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const statuses: ReadonlyArray<SetStatusParams["status"]> = [1, 3, 6, 8];
@@ -243,7 +245,7 @@ describe("createSmsBowerActivationEndpoints", () => {
       },
     ]);
 
-    const sentStatuses = calls.map((_, index) => expectActionBody(calls, index).get("status"));
+    const sentStatuses = calls.map((_, index) => getRequestParams(calls[index]).get("status"));
     expect(sentStatuses).toEqual(["1", "3", "6", "8"]);
   });
 
@@ -253,8 +255,8 @@ describe("createSmsBowerActivationEndpoints", () => {
     "ACCESS_ACTIVATION",
     "ACCESS_CANCEL",
   ] as const)("maps setStatus %s token responses", async (responseToken) => {
-    const { fetchMock } = createQueuedFetchMock([responseToken]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance(responseToken);
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const result = await endpoints.setStatus({ activationId: "998877", status: 6 });
@@ -267,8 +269,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("throws for unsupported setStatus values at runtime", async () => {
-    const { fetchMock } = createQueuedFetchMock(["STATUS_WAIT_CODE"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance("STATUS_WAIT_CODE");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     await expect(
@@ -280,8 +282,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("maps EARLY_CANCEL_DENIED from setStatus to SmsBowerApiError", async () => {
-    const { fetchMock } = createQueuedFetchMock(["EARLY_CANCEL_DENIED"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance("EARLY_CANCEL_DENIED");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.setStatus({ activationId: "12345", status: 8 });
@@ -295,8 +297,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("maps EARLY_CANCEL_DENIED from getStatus to SmsBowerApiError", async () => {
-    const { fetchMock } = createQueuedFetchMock(["EARLY_CANCEL_DENIED"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance("EARLY_CANCEL_DENIED");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.getStatus({ activationId: "12345" });
@@ -310,8 +312,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it.each(["getNumber", "getNumberV2"] as const)("maps NO_NUMBERS from %s to SmsBowerApiError", async (method) => {
-    const { fetchMock } = createQueuedFetchMock(["NO_NUMBERS"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance("NO_NUMBERS");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints[method]({
@@ -328,8 +330,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("throws SmsBowerParseError when getStatus receives an unknown lifecycle token", async () => {
-    const { fetchMock } = createQueuedFetchMock(["STATUS_UNKNOWN_X"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance("STATUS_UNKNOWN_X");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.getStatus({ activationId: "12345" });
@@ -343,8 +345,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("throws SmsBowerParseError when getNumber receives an unexpected lifecycle token", async () => {
-    const { fetchMock } = createQueuedFetchMock(["STATUS_OK:1234"]);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance("STATUS_OK:1234");
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.getNumber({
@@ -361,8 +363,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("throws SmsBowerParseError when getStatus receives malformed JSON", async () => {
-    const { fetchMock } = createQueuedFetchMock(['{"status":']);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance('{"status":');
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.getStatus({ activationId: "12345" });
@@ -375,8 +377,8 @@ describe("createSmsBowerActivationEndpoints", () => {
   });
 
   it("throws SmsBowerParseError when setStatus receives JSON instead of lifecycle token", async () => {
-    const { fetchMock } = createQueuedFetchMock(['{"ok":true}']);
-    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { fetch: fetchMock });
+    const { instance } = createMockAxiosInstance('{"ok":true}');
+    const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
 
     const request = endpoints.setStatus({ activationId: "12345", status: 1 });

@@ -33,10 +33,11 @@ import {
 import { SmsBowerParseError } from "./response-errors.js";
 import { parseSmsBowerResponse, type SmsBowerTokenResponse } from "./response-parser.js";
 import { sendHttpRequest } from "./transport.js";
-import type { FetchLike, ResolvedSmsBowerClientConfig, SmsBowerClientConfig } from "./types.js";
+import type { ResolvedSmsBowerClientConfig, SmsBowerClientConfig } from "./types.js";
+import type { AxiosInstance } from "axios";
 
 interface CreateSmsBowerClientOptions {
-  fetch?: FetchLike;
+  axios?: AxiosInstance;
 }
 
 type ActionParamsFor<TAction extends SmsBowerEndpointAction> = SmsBowerActionParamsMap[TAction];
@@ -428,7 +429,7 @@ export const createSmsBowerClient = (
       );
       const response = await sendHttpRequest(request, {
         timeoutMs: resolvedConfig.timeoutMs,
-        fetch: options.fetch,
+        axios: options.axios,
       });
 
       return response.bodyText;

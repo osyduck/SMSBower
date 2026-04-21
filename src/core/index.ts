@@ -14,7 +14,6 @@ export { createSmsBowerActivationEndpoints } from "./activation.js";
 export type {
   ActionParams,
   ActionParamValue,
-  FetchLike,
   HttpRequest,
   HttpResponse,
   ResolvedSmsBowerClientConfig,

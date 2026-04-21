@@ -21,22 +21,6 @@ export interface HttpRequest {
   headers: Record<string, string>;
 }
 
-export interface FetchResponseLike {
-  ok: boolean;
-  status: number;
-  text(): Promise<string>;
-}
-
-export type FetchLike = (
-  input: string,
-  init?: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string;
-    signal?: AbortSignal;
-  },
-) => Promise<FetchResponseLike>;
-
 export interface HttpResponse {
   status: number;
   bodyText: string;

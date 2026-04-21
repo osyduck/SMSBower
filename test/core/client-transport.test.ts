@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AxiosInstance, AxiosResponse } from "axios";
 
 import {
   createSmsBowerClient,
@@ -6,59 +7,59 @@ import {
   SmsBowerApiError,
   SmsBowerParseError,
   SmsBowerTransportError,
-  type FetchLike,
 } from "../../src/core/index.ts";
 
-const createSequencedFetchMock = (...bodyResponses: string[]): {
-  calls: Array<{ url: string; init?: Parameters<FetchLike>[1] }>;
-  fetch: FetchLike;
+vi.mock("axios", () => {
+  const mockRequest = vi.fn();
+  return {
+    default: { request: mockRequest },
+    __mockRequest: mockRequest,
+  };
+});
+
+const createMockAxiosInstance = (
+  ...bodyResponses: string[]
+): {
+  calls: Array<{ url: string; method: string; headers: Record<string, string> }>;
+  instance: AxiosInstance;
 } => {
-  const calls: Array<{ url: string; init?: Parameters<FetchLike>[1] }> = [];
+  const calls: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
   const queue = [...bodyResponses];
 
-  return {
-    calls,
-    fetch: async (url, init) => {
-      calls.push({ url, init });
-
+  const instance = {
+    request: vi.fn(async (config: any) => {
+      calls.push({ url: config.url, method: config.method, headers: config.headers });
       const bodyText = queue.shift();
       if (bodyText === undefined) {
-        throw new Error("No mock response available for fetch call.");
+        throw new Error("No mock response available.");
       }
+      return { status: 200, data: bodyText } as AxiosResponse;
+    }),
+  } as unknown as AxiosInstance;
 
-      return {
-        ok: true,
-        status: 200,
-        text: async () => bodyText,
-      };
-    },
-  };
+  return { calls, instance };
 };
 
-const getRequestParams = (call: { url: string; init?: Parameters<FetchLike>[1] } | undefined): URLSearchParams => {
+const getRequestParams = (
+  call: { url: string; method: string; headers: Record<string, string> } | undefined,
+): URLSearchParams => {
   if (!call) {
     return new URLSearchParams();
   }
 
   const parsedUrl = new URL(call.url);
-  if (parsedUrl.searchParams.toString().length > 0) {
-    return parsedUrl.searchParams;
-  }
-
-  return new URLSearchParams(typeof call.init?.body === "string" ? call.init.body : "");
+  return parsedUrl.searchParams;
 };
 
 describe("createSmsBowerClient", () => {
   it("uses a custom baseUrl override for action requests", async () => {
-    const calls: Array<{ url: string; init?: Parameters<FetchLike>[1] }> = [];
-    const fetchMock: FetchLike = async (url, init) => {
-      calls.push({ url, init });
-      return {
-        ok: true,
-        status: 200,
-        text: async () => "ACCESS_BALANCE:12.00",
-      };
-    };
+    const calls: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
+    const instance = {
+      request: vi.fn(async (config: any) => {
+        calls.push({ url: config.url, method: config.method, headers: config.headers });
+        return { status: 200, data: "ACCESS_BALANCE:12.00" } as AxiosResponse;
+      }),
+    } as unknown as AxiosInstance;
 
     const client = createSmsBowerClient(
       {
@@ -66,7 +67,7 @@ describe("createSmsBowerClient", () => {
         baseUrl: "https://example.com/custom-handler.php",
         userAgent: "smsbower-tests/1.0",
       },
-      { fetch: fetchMock },
+      { axios: instance },
     );
 
     await client.requestAction("getBalance");
@@ -77,17 +78,17 @@ describe("createSmsBowerClient", () => {
     const params = getRequestParams(calls[0]);
     expect(params.get("api_key")).toBe("custom-key");
     expect(params.get("action")).toBe("getBalance");
-    expect(calls[0]?.init?.method).toBe("GET");
+    expect(calls[0]?.method).toBe("GET");
   });
 
   it("maps getBalance to token parsing", async () => {
-    const { calls, fetch } = createSequencedFetchMock("ACCESS_BALANCE:12.00");
+    const { calls, instance } = createMockAxiosInstance("ACCESS_BALANCE:12.00");
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getBalance();
@@ -104,13 +105,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps getServicesList to JSON parsing", async () => {
-    const { calls, fetch } = createSequencedFetchMock('{"ot":"Example Service"}');
+    const { calls, instance } = createMockAxiosInstance('{"ot":"Example Service"}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getServicesList();
@@ -128,7 +129,7 @@ describe("createSmsBowerClient", () => {
   });
 
   it("normalizes wrapped getServicesList payload to canonical map", async () => {
-    const { fetch } = createSequencedFetchMock(
+    const { instance } = createMockAxiosInstance(
       '{"status":"success","services":[{"code":"ot","name":"WhatsApp"}]}',
     );
 
@@ -136,7 +137,7 @@ describe("createSmsBowerClient", () => {
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getServicesList();
@@ -151,7 +152,7 @@ describe("createSmsBowerClient", () => {
   });
 
   it("uses last code wins when wrapped getServicesList has duplicate codes", async () => {
-    const { fetch } = createSequencedFetchMock(
+    const { instance } = createMockAxiosInstance(
       '{"status":"success","services":[{"code":"ot","name":"WhatsApp"},{"code":"ot","name":"WhatsApp Business"}]}',
     );
 
@@ -159,7 +160,7 @@ describe("createSmsBowerClient", () => {
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getServicesList();
@@ -175,7 +176,7 @@ describe("createSmsBowerClient", () => {
   });
 
   it("ignores wrapped getServicesList entries with invalid code or name when valid entries exist", async () => {
-    const { fetch } = createSequencedFetchMock(
+    const { instance } = createMockAxiosInstance(
       '{"status":"success","services":[{"code":"ot","name":"WhatsApp"},{"code":null,"name":"BP - club"},{"code":"wa","name":"WhatsApp Business"},{"code":"","name":"Empty code"},{"code":"ig","name":null}]}',
     );
 
@@ -183,7 +184,7 @@ describe("createSmsBowerClient", () => {
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getServicesList();
@@ -200,13 +201,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("normalizes empty wrapped getServicesList services array to empty map", async () => {
-    const { fetch } = createSequencedFetchMock('{"status":"success","services":[]}');
+    const { instance } = createMockAxiosInstance('{"status":"success","services":[]}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getServicesList();
@@ -225,13 +226,13 @@ describe("createSmsBowerClient", () => {
     ];
 
     for (const responseBody of malformedResponses) {
-      const { fetch } = createSequencedFetchMock(responseBody);
+      const { instance } = createMockAxiosInstance(responseBody);
 
       const client = createSmsBowerClient(
         {
           apiKey: "api-key",
         },
-        { fetch },
+        { axios: instance },
       );
 
       const requestPromise = client.getServicesList();
@@ -245,13 +246,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps getCountries to JSON parsing", async () => {
-    const { calls, fetch } = createSequencedFetchMock('{"6":{"id":"6","eng":"Russia","rus":"Россия"}}');
+    const { calls, instance } = createMockAxiosInstance('{"6":{"id":"6","eng":"Russia","rus":"Россия"}}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getCountries();
@@ -273,7 +274,7 @@ describe("createSmsBowerClient", () => {
   });
 
   it("ignores malformed getCountries entries when valid entries exist", async () => {
-    const { fetch } = createSequencedFetchMock(
+    const { instance } = createMockAxiosInstance(
       '{"6":{"id":"6","eng":"Indonesia","rus":"Индонезия","chn":"印度尼西亚"},"":{"id":null,"eng":"Faroe Islands","rus":"Фарерские острова"}}',
     );
 
@@ -281,7 +282,7 @@ describe("createSmsBowerClient", () => {
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getCountries();
@@ -302,13 +303,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps getPrices to JSON parsing", async () => {
-    const { calls, fetch } = createSequencedFetchMock('{"ot":{"6":"12.50"}}');
+    const { calls, instance } = createMockAxiosInstance('{"ot":{"6":"12.50"}}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getPrices({
@@ -333,13 +334,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("normalizes getPrices when upstream returns country-first quote shape", async () => {
-    const { fetch } = createSequencedFetchMock('{"6":{"ot":{"cost":0.21,"count":53097}}}');
+    const { instance } = createMockAxiosInstance('{"6":{"ot":{"cost":0.21,"count":53097}}}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getPrices({
@@ -359,13 +360,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps getPricesV2 to JSON parsing", async () => {
-    const { calls, fetch } = createSequencedFetchMock('{"ot":{"6":{"cost":"11.00","count":3}}}');
+    const { calls, instance } = createMockAxiosInstance('{"ot":{"6":{"cost":"11.00","count":3}}}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getPricesV2({
@@ -393,13 +394,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("accepts getPricesV2 country-first bucket payload from live API", async () => {
-    const { fetch } = createSequencedFetchMock('{"6":{"ot":{"0.004":90,"0.21":919}}}');
+    const { instance } = createMockAxiosInstance('{"6":{"ot":{"0.004":90,"0.21":919}}}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getPricesV2({
@@ -422,13 +423,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps getPricesV3 to JSON parsing with optional filters", async () => {
-    const { calls, fetch } = createSequencedFetchMock('{"2295":{"ot":{"cost":"10.00","count":"4"}}}');
+    const { calls, instance } = createMockAxiosInstance('{"2295":{"ot":{"cost":"10.00","count":"4"}}}');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getPricesV3({
@@ -458,7 +459,7 @@ describe("createSmsBowerClient", () => {
   });
 
   it("accepts getPricesV3 provider objects that use price key", async () => {
-    const { fetch } = createSequencedFetchMock(
+    const { instance } = createMockAxiosInstance(
       '{"6":{"ot":{"2295":{"count":3677,"price":0.01,"provider_id":2295}}}}',
     );
 
@@ -466,7 +467,7 @@ describe("createSmsBowerClient", () => {
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const result = await client.getPricesV3({
@@ -493,13 +494,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps BAD_COUNTRY for getPricesV3 to SmsBowerApiError", async () => {
-    const { fetch } = createSequencedFetchMock("BAD_COUNTRY");
+    const { instance } = createMockAxiosInstance("BAD_COUNTRY");
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getPricesV3({
@@ -514,13 +515,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps BAD_KEY tokens to SmsBowerApiError for account endpoints", async () => {
-    const { fetch } = createSequencedFetchMock("BAD_KEY");
+    const { instance } = createMockAxiosInstance("BAD_KEY");
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getBalance();
@@ -534,13 +535,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("throws SmsBowerParseError for malformed JSON in catalog JSON endpoint wrappers", async () => {
-    const { fetch } = createSequencedFetchMock('{"ot":');
+    const { instance } = createMockAxiosInstance('{"ot":');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getServicesList();
@@ -553,13 +554,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("throws SmsBowerParseError for unexpected token format in JSON endpoint wrappers", async () => {
-    const { fetch } = createSequencedFetchMock("ACCESS_BALANCE:12.00");
+    const { instance } = createMockAxiosInstance("ACCESS_BALANCE:12.00");
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getServicesList();
@@ -573,13 +574,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps BAD_COUNTRY for getPrices to SmsBowerApiError", async () => {
-    const { fetch } = createSequencedFetchMock("BAD_COUNTRY");
+    const { instance } = createMockAxiosInstance("BAD_COUNTRY");
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getPrices({
@@ -596,13 +597,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("maps BAD_COUNTRY for getPricesV2 to SmsBowerApiError", async () => {
-    const { fetch } = createSequencedFetchMock("BAD_COUNTRY");
+    const { instance } = createMockAxiosInstance("BAD_COUNTRY");
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getPricesV2({
@@ -619,13 +620,13 @@ describe("createSmsBowerClient", () => {
   });
 
   it("throws SmsBowerParseError for malformed JSON in price endpoint wrappers", async () => {
-    const { fetch } = createSequencedFetchMock('{"ot":');
+    const { instance } = createMockAxiosInstance('{"ot":');
 
     const client = createSmsBowerClient(
       {
         apiKey: "api-key",
       },
-      { fetch },
+      { axios: instance },
     );
 
     const requestPromise = client.getPricesV3({
@@ -642,13 +643,9 @@ describe("createSmsBowerClient", () => {
 
 describe("sendHttpRequest", () => {
   it("returns status and body text for successful requests", async () => {
-    const successFetch: FetchLike = async () => {
-      return {
-        ok: true,
-        status: 201,
-        text: async () => "ACCESS_BALANCE:99.50",
-      };
-    };
+    const { instance } = createMockAxiosInstance();
+    const mockRequest = instance.request as ReturnType<typeof vi.fn>;
+    mockRequest.mockResolvedValueOnce({ status: 201, data: "ACCESS_BALANCE:99.50" } as AxiosResponse);
 
     const response = await sendHttpRequest(
       {
@@ -658,7 +655,7 @@ describe("sendHttpRequest", () => {
       },
       {
         timeoutMs: 250,
-        fetch: successFetch,
+        axios: instance,
       },
     );
 
@@ -669,13 +666,9 @@ describe("sendHttpRequest", () => {
   });
 
   it("maps non-ok HTTP responses to typed HTTP_STATUS transport errors", async () => {
-    const nonOkFetch: FetchLike = async () => {
-      return {
-        ok: false,
-        status: 403,
-        text: async () => "BAD_KEY",
-      };
-    };
+    const { instance } = createMockAxiosInstance();
+    const mockRequest = instance.request as ReturnType<typeof vi.fn>;
+    mockRequest.mockResolvedValueOnce({ status: 403, data: "BAD_KEY" } as AxiosResponse);
 
     const requestPromise = sendHttpRequest(
       {
@@ -685,7 +678,7 @@ describe("sendHttpRequest", () => {
       },
       {
         timeoutMs: 250,
-        fetch: nonOkFetch,
+        axios: instance,
       },
     );
 
@@ -693,48 +686,18 @@ describe("sendHttpRequest", () => {
     await expect(requestPromise).rejects.toMatchObject({
       code: "HTTP_STATUS",
       status: 403,
+      responseBody: "BAD_KEY",
     });
   });
 
-  it("throws NETWORK transport errors when no fetch implementation is available", async () => {
-    const originalFetch = globalThis.fetch;
-    vi.stubGlobal("fetch", undefined);
-
-    try {
-      const requestPromise = sendHttpRequest(
-        {
-          url: "https://example.com/handler.php",
-          method: "GET",
-          headers: {},
-        },
-        {
-          timeoutMs: 250,
-        },
-      );
-
-      await expect(requestPromise).rejects.toBeInstanceOf(SmsBowerTransportError);
-      await expect(requestPromise).rejects.toMatchObject({
-        code: "NETWORK",
-      });
-    } finally {
-      vi.stubGlobal("fetch", originalFetch);
-    }
-  });
-
   it("maps timeout failures to typed transport timeout errors", async () => {
-    const timeoutDrivenFetch: FetchLike = async (_url, init) => {
-      return await new Promise((_, reject) => {
-        const abortError = Object.assign(new Error("Request aborted"), { name: "AbortError" });
-
-        init?.signal?.addEventListener(
-          "abort",
-          () => {
-            reject(abortError);
-          },
-          { once: true },
-        );
-      });
-    };
+    const { instance } = createMockAxiosInstance();
+    const mockRequest = instance.request as ReturnType<typeof vi.fn>;
+    const timeoutError = Object.assign(new Error("timeout of 1ms exceeded"), {
+      code: "ECONNABORTED",
+      isAxiosError: true,
+    });
+    mockRequest.mockRejectedValueOnce(timeoutError);
 
     const requestPromise = sendHttpRequest(
       {
@@ -744,7 +707,7 @@ describe("sendHttpRequest", () => {
       },
       {
         timeoutMs: 1,
-        fetch: timeoutDrivenFetch,
+        axios: instance,
       },
     );
 
@@ -753,9 +716,9 @@ describe("sendHttpRequest", () => {
   });
 
   it("maps network failures to typed transport network errors", async () => {
-    const networkFailingFetch: FetchLike = async () => {
-      throw new TypeError("Failed to fetch");
-    };
+    const { instance } = createMockAxiosInstance();
+    const mockRequest = instance.request as ReturnType<typeof vi.fn>;
+    mockRequest.mockRejectedValueOnce(new Error("Network Error"));
 
     const requestPromise = sendHttpRequest(
       {
@@ -765,7 +728,7 @@ describe("sendHttpRequest", () => {
       },
       {
         timeoutMs: 250,
-        fetch: networkFailingFetch,
+        axios: instance,
       },
     );
 

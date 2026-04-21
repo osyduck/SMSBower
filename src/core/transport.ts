@@ -1,60 +1,54 @@
-import { SmsBowerTransportError, isAbortError } from "./errors.js";
-import type { FetchLike, HttpRequest, HttpResponse } from "./types.js";
+import axios, { type AxiosInstance, type AxiosError } from "axios";
+import { SmsBowerTransportError } from "./errors.js";
+import type { HttpRequest, HttpResponse } from "./types.js";
 
 interface SendHttpRequestOptions {
   timeoutMs: number;
-  fetch?: FetchLike;
+  axios?: AxiosInstance;
 }
 
-const resolveFetch = (fetchOverride: FetchLike | undefined): FetchLike => {
-  if (fetchOverride) {
-    return fetchOverride;
-  }
-
-  if (typeof globalThis.fetch === "function") {
-    return globalThis.fetch as FetchLike;
-  }
-
-  throw new SmsBowerTransportError("No fetch implementation available for SMSBower transport.", "NETWORK");
+const resolveAxios = (axiosOverride: AxiosInstance | undefined): AxiosInstance => {
+  return axiosOverride ?? axios;
 };
 
 export const sendHttpRequest = async (
   request: HttpRequest,
   options: SendHttpRequestOptions,
 ): Promise<HttpResponse> => {
-  const fetchImpl = resolveFetch(options.fetch);
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => {
-    abortController.abort();
-  }, options.timeoutMs);
+  const client = resolveAxios(options.axios);
 
   try {
-    const response = await fetchImpl(request.url, {
+    const response = await client.request({
+      url: request.url,
       method: request.method,
       headers: request.headers,
-      signal: abortController.signal,
+      timeout: options.timeoutMs,
+      // Force text response to match previous behavior
+      responseType: "text",
+      // Prevent axios from throwing on non-2xx (we handle it ourselves)
+      validateStatus: () => true,
     });
 
-    const bodyText = await response.text();
+    const status: number = response.status;
+    const bodyText: string = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
 
-    if (!response.ok) {
+    if (status < 200 || status >= 300) {
       throw new SmsBowerTransportError(
-        `SMSBower request failed with HTTP status ${response.status}.`,
+        `SMSBower request failed with HTTP status ${status}.`,
         "HTTP_STATUS",
-        { status: response.status },
+        { status, responseBody: bodyText },
       );
     }
 
-    return {
-      status: response.status,
-      bodyText,
-    };
+    return { status, bodyText };
   } catch (error) {
     if (error instanceof SmsBowerTransportError) {
       throw error;
     }
 
-    if (isAbortError(error)) {
+    const axiosError = error as AxiosError;
+
+    if (axiosError.code === "ECONNABORTED" || axiosError.code === "ERR_CANCELED") {
       throw new SmsBowerTransportError("SMSBower request timed out.", "TIMEOUT", {
         cause: error,
       });
@@ -63,7 +57,5 @@ export const sendHttpRequest = async (
     throw new SmsBowerTransportError("SMSBower network request failed.", "NETWORK", {
       cause: error,
     });
-  } finally {
-    clearTimeout(timeout);
   }
 };
