@@ -446,14 +446,14 @@ export const createSmsBowerClient = (
       const responseBody = await this.requestAction("getCountries", params);
       return parseCountriesActionResponse(responseBody, "getCountries");
     },
-    async getPrices(params: GetPricesParams): Promise<GetPricesResponse> {
+    async getPrices(params: GetPricesParams = {}): Promise<GetPricesResponse> {
       const responseBody = await this.requestAction("getPrices", {
         service: params.service,
         country: params.country,
       });
       return parsePricesV1ActionResponse(responseBody, "getPrices");
     },
-    async getPricesV2(params: GetPricesV2Params): Promise<GetPricesV2Response> {
+    async getPricesV2(params: GetPricesV2Params = {}): Promise<GetPricesV2Response> {
       const responseBody = await this.requestAction("getPricesV2", {
         service: params.service,
         country: params.country,

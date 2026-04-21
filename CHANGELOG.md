@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-04-21
+
+### API alignment
+
+- `getPrices` and `getPricesV2` now accept optional `service` and `country` params, matching the upstream API. Previously both were required.
+- `getNumberV2` JSON responses now expose all upstream fields: `activationCost`, `countryCode`, `canGetAnotherSms`, `activationTime`, `activationOperator`. Previously only `activationId` and `phoneNumber` were returned.
+- New `GetNumberV2JsonResponse` type exported for consumers who need to discriminate JSON vs token responses (`result.format === "json"`).
+- `getNumber` and `getNumberV2` now support all upstream request params: `maxPrice`, `minPrice`, `exceptProviderIds`, `phoneException`, `ref`, `userID` (shared), plus `operator`, `verification`, `forward` (V2-only).
+
 ## 0.4.0 - 2026-04-21
 
 ### Breaking changes

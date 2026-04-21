@@ -31,27 +31,39 @@ export type GetBalanceParams = SmsBowerNoParams;
 export type GetServicesListParams = SmsBowerNoParams;
 export type GetCountriesParams = SmsBowerNoParams;
 
-export interface GetPricesParams extends ServiceCountryParams {}
+export interface GetPricesParams {
+  service?: string;
+  country?: SmsBowerCountryCode;
+}
 
-export interface GetPricesV2Params extends ServiceCountryParams {}
+export interface GetPricesV2Params {
+  service?: string;
+  country?: SmsBowerCountryCode;
+}
 
 export interface GetPricesV3Params extends ProviderFilterParams {
   country: SmsBowerCountryCode;
   service?: string;
 }
 
-export interface NumberRequestFilters {
-  operator?: string;
-  ref?: string;
+export interface NumberRequestBaseParams {
   maxPrice?: number | `${number}`;
-  verification?: boolean | 0 | 1;
-  forward?: boolean | 0 | 1;
+  minPrice?: number | `${number}`;
+  exceptProviderIds?: SmsBowerProviderIds;
   phoneException?: string;
+  ref?: string;
+  userID?: string;
 }
 
-export interface GetNumberParams extends ServiceCountryParams, ProviderFilterParams {}
+export interface NumberRequestV2Filters {
+  operator?: string;
+  verification?: boolean | 0 | 1;
+  forward?: boolean | 0 | 1;
+}
 
-export interface GetNumberV2Params extends GetNumberParams, NumberRequestFilters {}
+export interface GetNumberParams extends ServiceCountryParams, ProviderFilterParams, NumberRequestBaseParams {}
+
+export interface GetNumberV2Params extends GetNumberParams, NumberRequestV2Filters {}
 
 export interface GetStatusParams {
   activationId: SmsBowerActivationId;
@@ -109,7 +121,20 @@ export type GetPricesResponse = SmsBowerJsonContract<PricesV1Value>;
 export type GetPricesV2Response = SmsBowerJsonContract<PricesV2Value>;
 export type GetPricesV3Response = SmsBowerJsonContract<PricesV3Value>;
 export type GetNumberResponse = AccessNumberResponse;
-export type GetNumberV2Response = AccessNumberResponse;
+
+export interface GetNumberV2JsonResponse {
+  format: "json";
+  activationId: string;
+  phoneNumber: string;
+  activationCost?: string;
+  countryCode?: string;
+  canGetAnotherSms?: boolean | number;
+  activationTime?: string;
+  activationOperator?: string;
+  rawResponse: string;
+}
+
+export type GetNumberV2Response = AccessNumberResponse | GetNumberV2JsonResponse;
 
 export type ActivationLifecycleResponse =
   | StatusWaitCodeResponse
@@ -137,8 +162,8 @@ export interface SmsBowerCatalogEndpointContracts {
 }
 
 export interface SmsBowerPriceEndpointContracts {
-  getPrices(params: GetPricesParams): Promise<GetPricesResponse>;
-  getPricesV2(params: GetPricesV2Params): Promise<GetPricesV2Response>;
+  getPrices(params?: GetPricesParams): Promise<GetPricesResponse>;
+  getPricesV2(params?: GetPricesV2Params): Promise<GetPricesV2Response>;
   getPricesV3(params: GetPricesV3Params): Promise<GetPricesV3Response>;
 }
 
@@ -174,17 +199,26 @@ export interface SmsBowerActionParamsMap {
     service: string;
     country: SmsBowerCountryCode;
     providerIds?: string;
+    exceptProviderIds?: string;
+    maxPrice?: number | `${number}`;
+    minPrice?: number | `${number}`;
+    phoneException?: string;
+    ref?: string;
+    userID?: string;
   };
   getNumberV2: {
     service: string;
     country: SmsBowerCountryCode;
     providerIds?: string;
-    operator?: string;
-    ref?: string;
+    exceptProviderIds?: string;
     maxPrice?: number | `${number}`;
+    minPrice?: number | `${number}`;
+    phoneException?: string;
+    ref?: string;
+    userID?: string;
+    operator?: string;
     verification?: 0 | 1;
     forward?: 0 | 1;
-    phoneException?: string;
   };
   getStatus: {
     id: SmsBowerActivationId;

@@ -79,7 +79,17 @@ const expectToken = <TToken extends SmsBowerTokenResponse["token"]>(
   return tokenResponse as Extract<SmsBowerTokenResponse, { token: TToken }>;
 };
 
-const isGetNumberV2JsonValue = (value: unknown): value is { activationId: string | number; phoneNumber: string } => {
+interface GetNumberV2JsonPayload {
+  activationId: string | number;
+  phoneNumber: string;
+  activationCost?: string | number;
+  countryCode?: string | number;
+  canGetAnotherSms?: boolean | number;
+  activationTime?: string;
+  activationOperator?: string;
+}
+
+const isGetNumberV2JsonValue = (value: unknown): value is GetNumberV2JsonPayload => {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -107,11 +117,17 @@ const parseGetNumberV2Response = (parsed: SmsBowerParsedResponse): GetNumberV2Re
     );
   }
 
+  const payload = parsed.value;
+
   return {
-    format: "token",
-    token: "ACCESS_NUMBER",
-    activationId: String(parsed.value.activationId),
-    phoneNumber: parsed.value.phoneNumber,
+    format: "json",
+    activationId: String(payload.activationId),
+    phoneNumber: payload.phoneNumber,
+    activationCost: payload.activationCost !== undefined ? String(payload.activationCost) : undefined,
+    countryCode: payload.countryCode !== undefined ? String(payload.countryCode) : undefined,
+    canGetAnotherSms: payload.canGetAnotherSms,
+    activationTime: payload.activationTime,
+    activationOperator: payload.activationOperator,
     rawResponse: parsed.rawResponse,
   };
 };
@@ -136,6 +152,12 @@ const toGetNumberParams = (params: GetNumberParams): SmsBowerActionParamsMap["ge
     service: params.service,
     country: params.country,
     providerIds: normalizeProviderIds(params.providerIds),
+    exceptProviderIds: normalizeProviderIds(params.exceptProviderIds),
+    maxPrice: params.maxPrice,
+    minPrice: params.minPrice,
+    phoneException: params.phoneException,
+    ref: params.ref,
+    userID: params.userID,
   };
 };
 
@@ -145,11 +167,8 @@ const toGetNumberV2Params = (
   return {
     ...toGetNumberParams(params),
     operator: params.operator,
-    ref: params.ref,
-    maxPrice: params.maxPrice,
     verification: normalizeFlag(params.verification),
     forward: normalizeFlag(params.forward),
-    phoneException: params.phoneException,
   };
 };
 

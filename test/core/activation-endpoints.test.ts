@@ -112,9 +112,9 @@ describe("createSmsBowerActivationEndpoints", () => {
     expect(body.get("phoneException")).toBe("+15551239999");
   });
 
-  it("maps getNumberV2 JSON responses to normalized ACCESS_NUMBER shape", async () => {
+  it("maps getNumberV2 JSON responses to full response shape with extra fields", async () => {
     const { instance } = createMockAxiosInstance(
-      '{"activationId":252210263,"phoneNumber":"6285136944176","activationCost":"0.01","countryCode":"6"}',
+      '{"activationId":252210263,"phoneNumber":"6285136944176","activationCost":"0.01","countryCode":"6","canGetAnotherSms":1,"activationTime":"2026-04-21 12:00:00","activationOperator":"telkomsel"}',
     );
     const coreClient = createSmsBowerClient({ apiKey: "test-key" }, { axios: instance });
     const endpoints = createSmsBowerActivationEndpoints(coreClient);
@@ -125,12 +125,16 @@ describe("createSmsBowerActivationEndpoints", () => {
     });
 
     expect(result).toEqual({
-      format: "token",
-      token: "ACCESS_NUMBER",
+      format: "json",
       activationId: "252210263",
       phoneNumber: "6285136944176",
+      activationCost: "0.01",
+      countryCode: "6",
+      canGetAnotherSms: 1,
+      activationTime: "2026-04-21 12:00:00",
+      activationOperator: "telkomsel",
       rawResponse:
-        '{"activationId":252210263,"phoneNumber":"6285136944176","activationCost":"0.01","countryCode":"6"}',
+        '{"activationId":252210263,"phoneNumber":"6285136944176","activationCost":"0.01","countryCode":"6","canGetAnotherSms":1,"activationTime":"2026-04-21 12:00:00","activationOperator":"telkomsel"}',
     });
   });
 
