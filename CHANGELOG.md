@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.0 - 2026-04-21
+
+### Breaking changes
+
+- **Transport layer replaced**: `fetch` → `axios`. The `FetchLike` and `FetchResponseLike` types are removed from the public API.
+- **Client constructor option changed**: `createSmsBowerClient(config, { fetch })` → `createSmsBowerClient(config, { axios })` for custom HTTP instance injection.
+- **First runtime dependency**: `axios` is now a required dependency (previously zero runtime deps).
+- Removed `isAbortError()` helper from `errors.ts` (internal, not exported).
+
+### Improvements
+
+- `SmsBowerTransportError` now carries `responseBody?: string` on `HTTP_STATUS` errors, making non-2xx failures easier to debug.
+- Timeout handling uses axios built-in `timeout` option instead of manual `AbortController`.
+- AxiosError code mapping: `ECONNABORTED` / `ERR_CANCELED` → `TIMEOUT`; all other errors → `NETWORK`.
+
+### Migration
+
+```diff
+- import { createSmsBowerClient, type FetchLike } from "smsbower";
++ import { createSmsBowerClient } from "smsbower";
++ import type { AxiosInstance } from "axios";
+
+- const client = createSmsBowerClient({ apiKey }, { fetch: myFetch });
++ const client = createSmsBowerClient({ apiKey }, { axios: myAxiosInstance });
+```
+
 ## 0.3.1 - 2026-04-10
 
 ### Compatibility fixes
